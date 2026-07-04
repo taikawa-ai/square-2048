@@ -182,8 +182,22 @@ export class Game {
     this.timeLeft = GAME_DURATION;
     this.running = false;
     this.keys = { up: false, down: false, left: false, right: false };
+    this.pointerActive = false;
+    this.pointerAngle = 0;
     this._nextId = 1;
     this._setupInput();
+  }
+
+  // Touch/drag steering (mobile): the caller feeds an absolute angle computed
+  // from where the pointer is relative to the player, which overrides keys
+  // while active. Call clearPointer() on release to fall back to keys.
+  setPointerAngle(angle) {
+    this.pointerActive = true;
+    this.pointerAngle = angle;
+  }
+
+  clearPointer() {
+    this.pointerActive = false;
   }
 
   _setupInput() {
@@ -281,6 +295,10 @@ export class Game {
   }
 
   _steerPlayer(s) {
+    if (this.pointerActive) {
+      s.desiredAngle = this.pointerAngle;
+      return;
+    }
     const { up, down, left, right } = this.keys;
     let vx = (right ? 1 : 0) - (left ? 1 : 0);
     let vy = (down ? 1 : 0) - (up ? 1 : 0);

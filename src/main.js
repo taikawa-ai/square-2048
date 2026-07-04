@@ -51,6 +51,32 @@ function beginGame() {
 startBtn.addEventListener('click', beginGame, { once: true });
 boostBtn.addEventListener('click', () => game.triggerPlayerBoost());
 
+// Touch/drag steering: the player is always drawn at screen center (the
+// camera follows them), so the pointer's offset from center gives the
+// direction to travel. Works for touch, mouse, and pen via Pointer Events.
+let activePointerId = null;
+function pointerToAngle(e) {
+  const rect = canvas.getBoundingClientRect();
+  const dx = e.clientX - rect.left - canvas.width / 2;
+  const dy = e.clientY - rect.top - canvas.height / 2;
+  return Math.atan2(dy, dx);
+}
+canvas.addEventListener('pointerdown', (e) => {
+  activePointerId = e.pointerId;
+  game.setPointerAngle(pointerToAngle(e));
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (activePointerId !== e.pointerId) return;
+  game.setPointerAngle(pointerToAngle(e));
+});
+function releasePointer(e) {
+  if (activePointerId !== e.pointerId) return;
+  activePointerId = null;
+  game.clearPointer();
+}
+canvas.addEventListener('pointerup', releasePointer);
+canvas.addEventListener('pointercancel', releasePointer);
+
 function drawGrid(camX, camY) {
   const step = 100;
   ctx.strokeStyle = 'rgba(255,255,255,0.05)';
