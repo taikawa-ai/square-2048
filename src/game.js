@@ -20,6 +20,8 @@ const BOOST_MULTIPLIER = 1.9;
 const FLOOR_BOOST_DURATION = 2500; // ms, from stepping on a dash floor
 const BUTTON_BOOST_DURATION = 2000; // ms, from pressing the boost button
 const BUTTON_BOOST_COOLDOWN = 8000; // ms between button boosts
+const FRENZY_TIME_LEFT = 90; // seconds; endgame frenzy kicks in below this
+const TRIPLER_CHANCE = 0.05; // x3 block spawn chance, frenzy only
 
 // Half the side length of a block's square hitbox/sprite, based on its value.
 function blockHalfSize(value) {
@@ -49,6 +51,12 @@ const BLOCK_WEIGHTS = [
   { value: 128, weight: 0.3 }, // rare
 ];
 
+// Extra number values thrown into the pool during the endgame frenzy.
+const FRENZY_BLOCK_WEIGHTS = [
+  { value: 128, weight: 3 },
+  { value: 256, weight: 1.5 },
+];
+
 // Chance a spawned floating block is a power-up rather than a plain number.
 const MULTIPLIER_CHANCE = 0.06; // x2
 const DIVIDER_CHANCE = 0.06; // /2
@@ -74,6 +82,13 @@ const FLOOR_DEFS = [
   { type: 'speed', label: 'ダッシュ', color: '#38bdf8' },
 ];
 
+// 'quad' floors only start appearing once the endgame frenzy kicks in.
+const FRENZY_FLOOR_DEFS = [
+  { type: 'quad', label: '素数', color: '#f43f5e', test: (n) => isPrime(n) },
+  { type: 'quad', label: '3の倍数', color: '#f43f5e', test: (n) => n % 3 === 0 },
+  { type: 'quad', label: '偶数', color: '#f43f5e', test: (n) => n % 2 === 0 },
+];
+
 const BOT_NAMES = [
   'ミク', 'ハルト', 'ソラ', 'レン', 'アオイ', 'ユナ', 'カイ', 'リン', 'ノア', 'ヒナ',
 ];
@@ -82,10 +97,11 @@ const COLORS = [
   '#4fd3c4', '#ff6b6b', '#ffd54a', '#7c83fd', '#ff9f6b', '#69db7c', '#e879f9', '#60a5fa',
 ];
 
-function pickWeightedValue() {
-  const total = BLOCK_WEIGHTS.reduce((s, b) => s + b.weight, 0);
+function pickWeightedValue(frenzy) {
+  const weights = frenzy ? BLOCK_WEIGHTS.concat(FRENZY_BLOCK_WEIGHTS) : BLOCK_WEIGHTS;
+  const total = weights.reduce((s, b) => s + b.weight, 0);
   let r = Math.random() * total;
-  for (const b of BLOCK_WEIGHTS) {
+  for (const b of weights) {
     if (r < b.weight) return b.value;
     r -= b.weight;
   }
@@ -175,12 +191,14 @@ function chainSpan(chain) {
 }
 
 export class Game {
-  constructor({ onEnd }) {
+  constructor({ onEnd, onMessage }) {
     this.onEnd = onEnd;
+    this.onMessage = onMessage;
     this.entities = [];
     this.blocks = [];
     this.timeLeft = GAME_DURATION;
     this.running = false;
+    this.frenzyActive = false;
     this.keys = { up: false, down: false, left: false, right: false };
     this.pointerActive = false;
     this.pointerAngle = 0;
@@ -229,6 +247,7 @@ export class Game {
       const color = COLORS[i % COLORS.length];
       this.entities.push(new Snake(this._nextId++, name, false, color));
     }
+    this.frenzyActive = false;
     for (let i = 0; i < NUM_FLOATING_BLOCKS; i++) this._spawnBlock();
 
     this.floors = [];
@@ -236,7 +255,8 @@ export class Game {
   }
 
   _spawnFloor() {
-    const def = FLOOR_DEFS[Math.floor(Math.random() * FLOOR_DEFS.length)];
+    const pool = this.frenzyActive ? FLOOR_DEFS.concat(FRENZY_FLOOR_DEFS) : FLOOR_DEFS;
+    const def = pool[Math.floor(Math.random() * pool.length)];
     this.floors.push({
       id: this._nextId++,
       ...def,
@@ -252,12 +272,32 @@ export class Game {
     setTimeout(() => this._spawnFloor(), randRange(FLOOR_RESPAWN_MIN, FLOOR_RESPAWN_MAX));
   }
 
+  // Once the clock drops below FRENZY_TIME_LEFT: x3 blocks, x4 floors, and
+  // 128/256 number blocks start showing up to shake up the endgame.
+  _maybeStartFrenzy() {
+    if (this.frenzyActive || this.timeLeft > FRENZY_TIME_LEFT) return;
+    this.frenzyActive = true;
+    for (let i = 0; i < 3; i++) {
+      this.floors.push({
+        id: this._nextId++,
+        ...FRENZY_FLOOR_DEFS[i % FRENZY_FLOOR_DEFS.length],
+        x: randRange(300, WORLD_W - 300),
+        y: randRange(300, WORLD_H - 300),
+        w: FLOOR_SIZE,
+        h: FLOOR_SIZE,
+      });
+    }
+    this.onMessage?.('🔥 残り1分30秒！ x3ブロック＆x4床が出現！');
+  }
+
   _spawnBlock() {
     const r = Math.random();
+    const tripleChance = this.frenzyActive ? TRIPLER_CHANCE : 0;
     let kind;
     if (r < MULTIPLIER_CHANCE) kind = { kind: 'multiplier', op: 'x2' };
     else if (r < MULTIPLIER_CHANCE + DIVIDER_CHANCE) kind = { kind: 'multiplier', op: 'div2' };
-    else kind = { kind: 'number', value: pickWeightedValue() };
+    else if (r < MULTIPLIER_CHANCE + DIVIDER_CHANCE + tripleChance) kind = { kind: 'multiplier', op: 'x3' };
+    else kind = { kind: 'number', value: pickWeightedValue(this.frenzyActive) };
 
     this.blocks.push({
       id: this._nextId++,
@@ -277,6 +317,7 @@ export class Game {
       this.onEnd?.(this._standings());
       return;
     }
+    this._maybeStartFrenzy();
 
     for (const s of this.entities) {
       if (!s.alive) {
@@ -380,21 +421,31 @@ export class Game {
     }
   }
 
+  // Reaching 2048 exchanges it for a trophy. Whatever's left over past 2048
+  // isn't lost - it's halved and carried into the next run instead of
+  // resetting to a fixed starting value.
+  _checkTrophyExchange(s) {
+    if (s.sum < 2048) return;
+    const overflow = s.sum - 2048;
+    s.sum = Math.max(1, Math.floor(overflow / 2));
+    if (overflow === 0) {
+      s.trophies += 2;
+      if (s.isPlayer) this.onMessage?.('ピッタリ賞！トロフィー2倍！');
+    } else {
+      s.trophies++;
+      if (s.isPlayer) this.onMessage?.('2048をトロフィーと交換！');
+    }
+  }
+
   _applyGrowth(s, value) {
     s.sum += value;
-    if (s.sum >= 2048) {
-      s.sum = 2;
-      s.trophies++;
-    }
+    this._checkTrophyExchange(s);
   }
 
   _applyMultiplier(s, factor) {
     if (factor > 1) {
       s.sum *= factor;
-      if (s.sum >= 2048) {
-        s.sum = 2;
-        s.trophies++;
-      }
+      this._checkTrophyExchange(s);
     } else {
       // Truncate down when the sum is odd (e.g. 41 -> 20), never round up.
       s.sum = Math.max(1, Math.floor(s.sum * factor));
@@ -426,7 +477,8 @@ export class Game {
         if (b.kind === 'multiplier') {
           if (squareOverlap(s.x, s.y, aHalf, b.x, b.y, MULTIPLIER_HALF, HIT_MARGIN)) {
             this.blocks.splice(i, 1);
-            this._applyMultiplier(s, b.op === 'x2' ? 2 : 0.5);
+            const factor = b.op === 'x2' ? 2 : b.op === 'x3' ? 3 : 0.5;
+            this._applyMultiplier(s, factor);
             setTimeout(() => this._spawnBlock(), randRange(400, 1500));
           }
           continue;
@@ -452,6 +504,11 @@ export class Game {
         if (!overlapping) continue;
         if (f.type === 'double' && f.test(s.sum)) {
           this._applyMultiplier(s, 2);
+          this._consumeFloor(i);
+          break;
+        }
+        if (f.type === 'quad' && f.test(s.sum)) {
+          this._applyMultiplier(s, 4);
           this._consumeFloor(i);
           break;
         }
@@ -498,6 +555,7 @@ export class Game {
     s.eatenCount++;
     s.respawnAt = performance.now() + RESPAWN_DELAY;
     s.respawnSum = Math.max(MIN_RESPAWN_VALUE, Math.floor(s.headValue / 2));
+    if (s.isPlayer) this.onMessage?.('食われた！');
   }
 
   // Ranking: most trophies wins; ties broken by fewer times eaten.

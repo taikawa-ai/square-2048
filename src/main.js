@@ -11,6 +11,15 @@ const trophyEl = document.getElementById('trophy-count');
 const sumEl = document.getElementById('sum-count');
 const leaderboardEl = document.getElementById('leaderboard');
 const boostBtn = document.getElementById('boost-btn');
+const toastEl = document.getElementById('toast');
+
+let toastTimer = null;
+function showToast(text) {
+  toastEl.textContent = text;
+  toastEl.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('visible'), 1600);
+}
 
 function resize() {
   canvas.width = window.innerWidth;
@@ -27,6 +36,7 @@ function fmtTime(t) {
 
 const game = new Game({
   onEnd: (standings) => showResults(standings),
+  onMessage: (text) => showToast(text),
 });
 
 function showResults(standings) {
@@ -131,7 +141,8 @@ function drawFloor(f, camX, camY) {
   ctx.fillStyle = f.color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const text = f.type === 'speed' ? `⚡ ${f.label}` : `x2: ${f.label}`;
+  const text =
+    f.type === 'speed' ? `⚡ ${f.label}` : f.type === 'quad' ? `x4: ${f.label}` : `x2: ${f.label}`;
   ctx.fillText(text, sx, sy);
 }
 
@@ -161,8 +172,8 @@ function render() {
     const p = toScreen(b.x, b.y);
     if (p.x < -30 || p.x > canvas.width + 30 || p.y < -30 || p.y > canvas.height + 30) continue;
     if (b.kind === 'multiplier') {
-      const fill = b.op === 'x2' ? '#ffd54a' : '#60a5fa';
-      const label = b.op === 'x2' ? '×2' : '÷2';
+      const fill = b.op === 'x2' ? '#ffd54a' : b.op === 'x3' ? '#fb923c' : '#60a5fa';
+      const label = b.op === 'x2' ? '×2' : b.op === 'x3' ? '×3' : '÷2';
       drawBlock(p.x, p.y, label, MULTIPLIER_HALF, fill);
     } else {
       drawBlock(p.x, p.y, b.value, blockHalfSize(b.value), '#8b93b8');

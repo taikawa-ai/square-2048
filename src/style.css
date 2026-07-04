@@ -147,3 +147,23 @@ html, body {
   color: #cbd5e1;
   cursor: default;
 }
+
+#toast {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  font-size: 28px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  white-space: nowrap;
+}
+
+#toast.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
