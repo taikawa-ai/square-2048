@@ -182,17 +182,24 @@ function render() {
 
   for (const s of game.entities) {
     if (!s.alive) continue;
+    const invincible = s.isInvincible;
+    if (invincible) ctx.globalAlpha = 0.5 + 0.4 * Math.sin(performance.now() / 90);
     const positions = s.segmentPositions();
     for (let i = positions.length - 1; i >= 0; i--) {
       const seg = positions[i];
       const p = toScreen(seg.x, seg.y);
       drawBlock(p.x, p.y, seg.value, blockHalfSize(seg.value), s.color, '#12131c');
     }
+    ctx.globalAlpha = 1;
     const headPos = toScreen(s.x, s.y);
     ctx.font = '12px sans-serif';
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
-    ctx.fillText(s.name, headPos.x, headPos.y - blockHalfSize(s.headValue) - 10);
+    ctx.fillText(
+      invincible ? `🛡️ ${s.name}` : s.name,
+      headPos.x,
+      headPos.y - blockHalfSize(s.headValue) - 10,
+    );
   }
 }
 
@@ -213,10 +220,11 @@ function updateHud() {
     }
   }
   const standings = game.standings();
+  const mySum = game.player ? (game.player.alive ? game.player.sum : 0) : 0;
   leaderboardEl.innerHTML = `<h3>リーダーボード</h3><ol>${standings
     .slice(0, 6)
     .map((s) => `<li class="${s.isPlayer ? 'me' : ''}">${s.name} 🏆${s.trophies} 💀${s.eatenCount}</li>`)
-    .join('')}</ol>`;
+    .join('')}</ol><div id="my-value">${mySum}</div>`;
 }
 
 let last = performance.now();

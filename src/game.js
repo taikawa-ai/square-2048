@@ -22,6 +22,7 @@ const BUTTON_BOOST_DURATION = 2000; // ms, from pressing the boost button
 const BUTTON_BOOST_COOLDOWN = 8000; // ms between button boosts
 const FRENZY_TIME_LEFT = 90; // seconds; endgame frenzy kicks in below this
 const TRIPLER_CHANCE = 0.05; // x3 block spawn chance, frenzy only
+const INVINCIBLE_DURATION = 2500; // ms of safety after (re)spawning
 
 // Half the side length of a block's square hitbox/sprite, based on its value.
 function blockHalfSize(value) {
@@ -147,6 +148,11 @@ class Snake {
     this.aiRepathAt = 0;
     this.boostUntil = 0;
     this.boostReadyAt = 0;
+    this.invincibleUntil = performance.now() + INVINCIBLE_DURATION;
+  }
+
+  get isInvincible() {
+    return performance.now() < this.invincibleUntil;
   }
 
   get chain() {
@@ -526,6 +532,7 @@ export class Game {
     for (const a of alive) {
       for (const b of alive) {
         if (a === b || !a.alive || !b.alive) continue;
+        if (b.isInvincible) continue; // fresh (re)spawns can't be killed or stolen from
         const aHalf = blockHalfSize(a.headValue);
         if (squareOverlap(a.x, a.y, aHalf, b.x, b.y, blockHalfSize(b.headValue), HIT_MARGIN)) {
           if (a.headValue > b.headValue) {
