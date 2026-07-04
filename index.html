@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Square 2048</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game"></canvas>
+      <div id="hud">
+        <div id="hud-timer">05:00</div>
+        <div id="hud-trophy">🏆 <span id="trophy-count">0</span></div>
+        <div id="hud-sum">合計: <span id="sum-count">2</span> / 2047</div>
+      </div>
+      <div id="leaderboard"></div>
+      <button id="boost-btn">⚡ ブースト</button>
+      <div id="overlay">
+        <div id="overlay-panel">
+          <h1>Square 2048</h1>
+          <p class="rules">
+            矢印キー / WASD で移動。数字ブロックは自分の先頭の数字以下しか拾えません。<br />
+            同じ数字がくっつくと合体して倍になります。合計が2048になる瞬間に1へリセット、トロフィー+1！<br />
+            他プレイヤーの胴体ブロックは、それが自分の先頭の数字より小さければ奪えます。頭同士がぶつかると、大きい方が勝ち、負けた方は復活まで待機。<br />
+            ×2/÷2ブロックや、条件を満たすと2倍になる床、ダッシュ床もあります。ブーストボタン（またはスペースキー）で一定時間ごとに加速できます。<br />
+            制限時間5分でトロフィー数を競え。
+          </p>
+          <button id="start-btn">スタート</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
