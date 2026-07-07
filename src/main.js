@@ -21,11 +21,30 @@ function showToast(text) {
   toastTimer = setTimeout(() => toastEl.classList.remove('visible'), 1600);
 }
 
+// View state in CSS pixels plus the device-pixel-ratio for the backing store.
+// `zoom` shrinks the world on small screens so phone players still see a
+// useful chunk of the field instead of getting ambushed off-screen.
+const view = { w: window.innerWidth, h: window.innerHeight, dpr: 1, zoom: 1 };
+
+function computeZoom() {
+  const minDim = Math.min(view.w, view.h);
+  return Math.max(0.55, Math.min(1, minDim / 720));
+}
+
 function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth || window.innerWidth;
+  const h = canvas.clientHeight || window.innerHeight;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  view.w = w;
+  view.h = h;
+  view.dpr = dpr;
+  view.zoom = computeZoom();
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
+window.visualViewport?.addEventListener('resize', resize);
 resize();
 
 function fmtTime(t) {
@@ -67,8 +86,9 @@ boostBtn.addEventListener('click', () => game.triggerPlayerBoost());
 let activePointerId = null;
 function pointerToAngle(e) {
   const rect = canvas.getBoundingClientRect();
-  const dx = e.clientX - rect.left - canvas.width / 2;
-  const dy = e.clientY - rect.top - canvas.height / 2;
+  // Zoom/DPR are uniform scales, so they don't affect the direction angle.
+  const dx = e.clientX - rect.left - rect.width / 2;
+  const dy = e.clientY - rect.top - rect.height / 2;
   return Math.atan2(dy, dx);
 }
 canvas.addEventListener('pointerdown', (e) => {
@@ -88,23 +108,26 @@ canvas.addEventListener('pointerup', releasePointer);
 canvas.addEventListener('pointercancel', releasePointer);
 
 function drawGrid(camX, camY) {
-  const step = 100;
+  const { w, h, zoom } = view;
+  const step = 100; // world units
+  const halfW = w / 2 / zoom;
+  const halfH = h / 2 / zoom;
   ctx.strokeStyle = 'rgba(255,255,255,0.05)';
   ctx.lineWidth = 1;
-  const startX = Math.floor((camX - canvas.width / 2) / step) * step;
-  const startY = Math.floor((camY - canvas.height / 2) / step) * step;
-  for (let x = startX; x < camX + canvas.width / 2; x += step) {
-    const sx = x - camX + canvas.width / 2;
+  const startX = Math.floor((camX - halfW) / step) * step;
+  const startY = Math.floor((camY - halfH) / step) * step;
+  for (let x = startX; x < camX + halfW; x += step) {
+    const sx = (x - camX) * zoom + w / 2;
     ctx.beginPath();
     ctx.moveTo(sx, 0);
-    ctx.lineTo(sx, canvas.height);
+    ctx.lineTo(sx, h);
     ctx.stroke();
   }
-  for (let y = startY; y < camY + canvas.height / 2; y += step) {
-    const sy = y - camY + canvas.height / 2;
+  for (let y = startY; y < camY + halfH; y += step) {
+    const sy = (y - camY) * zoom + h / 2;
     ctx.beginPath();
     ctx.moveTo(0, sy);
-    ctx.lineTo(canvas.width, sy);
+    ctx.lineTo(w, sy);
     ctx.stroke();
   }
 }
@@ -123,21 +146,24 @@ function drawBlock(px, py, value, half, fill, textColor = '#1a1c2c') {
 }
 
 function drawFloor(f, camX, camY) {
-  const sx = f.x - camX + canvas.width / 2;
-  const sy = f.y - camY + canvas.height / 2;
-  if (sx < -f.w || sx > canvas.width + f.w || sy < -f.h || sy > canvas.height + f.h) return;
+  const { w, h, zoom } = view;
+  const sx = (f.x - camX) * zoom + w / 2;
+  const sy = (f.y - camY) * zoom + h / 2;
+  const fw = f.w * zoom;
+  const fh = f.h * zoom;
+  if (sx < -fw || sx > w + fw || sy < -fh || sy > h + fh) return;
   ctx.save();
   ctx.globalAlpha = 0.28;
   ctx.fillStyle = f.color;
   ctx.beginPath();
-  ctx.roundRect(sx - f.w / 2, sy - f.h / 2, f.w, f.h, 14);
+  ctx.roundRect(sx - fw / 2, sy - fh / 2, fw, fh, 14);
   ctx.fill();
   ctx.globalAlpha = 0.8;
   ctx.strokeStyle = f.color;
   ctx.lineWidth = 2;
   ctx.stroke();
   ctx.restore();
-  ctx.font = 'bold 22px sans-serif';
+  ctx.font = `bold ${Math.max(12, Math.min(22, fw * 0.13))}px sans-serif`;
   ctx.fillStyle = f.color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -147,36 +173,40 @@ function drawFloor(f, camX, camY) {
 }
 
 function render() {
+  const { w, h, dpr, zoom } = view;
   const cam = game.player && game.player.alive ? game.player : null;
   const camX = cam ? cam.x : WORLD_W / 2;
   const camY = cam ? cam.y : WORLD_H / 2;
 
+  // Draw in CSS pixels; the DPR scale keeps it crisp on retina.
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#23263a';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, w, h);
   drawGrid(camX, camY);
 
   const toScreen = (x, y) => ({
-    x: x - camX + canvas.width / 2,
-    y: y - camY + canvas.height / 2,
+    x: (x - camX) * zoom + w / 2,
+    y: (y - camY) * zoom + h / 2,
   });
 
   // world bounds
   const tl = toScreen(0, 0);
   ctx.strokeStyle = 'rgba(255,255,255,0.25)';
   ctx.lineWidth = 3;
-  ctx.strokeRect(tl.x, tl.y, WORLD_W, WORLD_H);
+  ctx.strokeRect(tl.x, tl.y, WORLD_W * zoom, WORLD_H * zoom);
 
   for (const f of game.floors ?? []) drawFloor(f, camX, camY);
 
+  const margin = 40;
   for (const b of game.blocks) {
     const p = toScreen(b.x, b.y);
-    if (p.x < -30 || p.x > canvas.width + 30 || p.y < -30 || p.y > canvas.height + 30) continue;
+    if (p.x < -margin || p.x > w + margin || p.y < -margin || p.y > h + margin) continue;
     if (b.kind === 'multiplier') {
       const fill = b.op === 'x2' ? '#ffd54a' : b.op === 'x3' ? '#fb923c' : '#60a5fa';
       const label = b.op === 'x2' ? '×2' : b.op === 'x3' ? '×3' : '÷2';
-      drawBlock(p.x, p.y, label, MULTIPLIER_HALF, fill);
+      drawBlock(p.x, p.y, label, MULTIPLIER_HALF * zoom, fill);
     } else {
-      drawBlock(p.x, p.y, b.value, blockHalfSize(b.value), '#8b93b8');
+      drawBlock(p.x, p.y, b.value, blockHalfSize(b.value) * zoom, '#8b93b8');
     }
   }
 
@@ -188,7 +218,7 @@ function render() {
     for (let i = positions.length - 1; i >= 0; i--) {
       const seg = positions[i];
       const p = toScreen(seg.x, seg.y);
-      drawBlock(p.x, p.y, seg.value, blockHalfSize(seg.value), s.color, '#12131c');
+      drawBlock(p.x, p.y, seg.value, blockHalfSize(seg.value) * zoom, s.color, '#12131c');
     }
     ctx.globalAlpha = 1;
     const headPos = toScreen(s.x, s.y);
@@ -198,7 +228,7 @@ function render() {
     ctx.fillText(
       invincible ? `🛡️ ${s.name}` : s.name,
       headPos.x,
-      headPos.y - blockHalfSize(s.headValue) - 10,
+      headPos.y - blockHalfSize(s.headValue) * zoom - 10,
     );
   }
 }

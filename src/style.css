@@ -16,6 +16,9 @@ html, body {
   position: relative;
   width: 100vw;
   height: 100vh;
+  /* Dynamic viewport height so the boost button stays visible on mobile
+     Safari/Chrome where the URL bar eats into 100vh. */
+  height: 100dvh;
 }
 
 #game {
@@ -90,6 +93,10 @@ html, body {
   align-items: center;
   justify-content: center;
   background: rgba(10, 11, 20, 0.85);
+  /* Above the boost button so it isn't visible through the title/results. */
+  z-index: 40;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 #overlay.hidden {
@@ -101,6 +108,7 @@ html, body {
   text-align: center;
   color: #fff;
   padding: 24px;
+  margin: auto;
 }
 
 #overlay-panel h1 {
@@ -139,9 +147,11 @@ html, body {
 
 #boost-btn {
   position: absolute;
-  bottom: 28px;
+  /* Sit above the mobile home-indicator / browser chrome. */
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
   left: 50%;
   transform: translateX(-50%);
+  z-index: 30;
   font-size: 16px;
   font-weight: 700;
   padding: 14px 28px;
@@ -150,13 +160,39 @@ html, body {
   background: #38bdf8;
   color: #0b1220;
   cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 #boost-btn:disabled {
   background: #4b5563;
   color: #cbd5e1;
   cursor: default;
+}
+
+/* Bigger, thumb-friendly boost button + compact HUD on phones. */
+@media (max-width: 640px) {
+  #boost-btn {
+    font-size: 18px;
+    padding: 18px 40px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  }
+  #hud {
+    font-size: 14px;
+    gap: 10px;
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+  }
+  #leaderboard {
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    right: 8px;
+    width: 132px;
+    padding: 7px 9px;
+    font-size: 11px;
+  }
+  #leaderboard h3 {
+    font-size: 11px;
+  }
 }
 
 #toast {
